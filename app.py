@@ -1,4 +1,3 @@
-import html
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -150,25 +149,10 @@ def estimate_grade(total: int, thresholds: list[dict[str, int | str]]) -> str:
     return grade
 
 
-def next_grade_target(total: int, thresholds: list[dict[str, int | str]]) -> str:
-    current_grade = estimate_grade(total, thresholds)
-    for threshold in thresholds:
-        minimum = int(threshold["minimum"])
-        target_grade = str(threshold["grade"])
-        if total < minimum and target_grade != current_grade:
-            missing = minimum - total
-            return f"{missing} point til {target_grade}"
-    return "Maks. nået"
-
-
 def format_option(option: Option) -> str:
     if option.level == 0:
         return "Ikke valgt - 0 point"
     return f"Niveau {option.level} - {option.requirement} - {option.points} point"
-
-
-def format_level(option: Option) -> str:
-    return "-" if option.level == 0 else str(option.level)
 
 
 def selected_test_a_mode() -> str:
@@ -191,85 +175,31 @@ def main() -> None:
         """
         <style>
         .block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 760px; }
-        h1 { margin-bottom: 0.15rem; }
         div[data-testid="stMetric"] {
             background: #f7f7fb;
             border: 1px solid #e6e6ef;
             border-radius: 16px;
-            padding: 10px 12px;
+            padding: 14px 16px;
         }
-        div[data-testid="stMetricValue"] { font-size: 1.65rem; }
+        div[data-testid="stMetricValue"] { font-size: 2rem; }
         .exercise-card {
             border: 1px solid #e6e6ef;
             border-radius: 16px;
-            padding: 14px;
-            margin: 14px 0 8px 0;
-            background: #fff;
-            box-shadow: 0 1px 8px rgba(20, 20, 43, 0.04);
-        }
-        .exercise-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 0.15rem; }
-        .exercise-subtitle { color: #666; font-size: 0.9rem; margin-bottom: 0.55rem; }
-        .selected-result {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-top: 8px;
-        }
-        .pill {
-            background: #eef6ff;
-            border: 1px solid #d7eaff;
-            border-radius: 999px;
-            padding: 5px 10px;
-            font-weight: 650;
-            font-size: 0.9rem;
-        }
-        .muted-pill {
-            background: #f8f8fb;
-            border: 1px solid #e6e6ef;
-            border-radius: 999px;
-            padding: 5px 10px;
-            color: #555;
-            font-size: 0.88rem;
-        }
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
-            gap: 8px;
-            margin: 8px 0 18px 0;
-        }
-        .dashboard-item {
-            border: 1px solid #e6e6ef;
-            border-radius: 14px;
-            padding: 9px 10px;
+            padding: 14px 14px 6px 14px;
+            margin: 12px 0;
             background: white;
         }
-        .dashboard-name { font-weight: 700; font-size: 0.9rem; }
-        .dashboard-detail { color: #555; font-size: 0.84rem; margin-top: 2px; }
-        .level-guide {
-            color: #666;
-            font-size: 0.82rem;
-            margin-top: -4px;
-            line-height: 1.35;
-        }
-        div[role="radiogroup"] {
-            gap: 0.35rem;
-            flex-wrap: wrap;
-        }
-        @media (max-width: 640px) {
-            .block-container { padding-left: 0.85rem; padding-right: 0.85rem; }
-            div[data-testid="column"] { min-width: 30% !important; }
-            div[data-testid="stMetricValue"] { font-size: 1.35rem; }
-        }
+        .exercise-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 0.15rem; }
+        .exercise-subtitle { color: #666; font-size: 0.92rem; margin-bottom: 0.65rem; }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
     st.title("MFT Point Tracker")
-    st.caption("Live dashboard til eksamen. Tap niveauet for hver øvelse, så opdateres pointene med det samme.")
+    st.caption("Vælg niveauet for hver øvelse under eksamen. Totalen opdateres med det samme.")
     summary = st.container()
     progress_placeholder = st.empty()
-    dashboard_placeholder = st.empty()
     st.divider()
 
     if not WORKBOOK_PATH.exists():
@@ -290,14 +220,6 @@ def main() -> None:
     selections: dict[str, Option] = {}
     total = 0
 
-    control_col, reset_col = st.columns([2, 1])
-    with control_col:
-        st.caption("Quick select: `-` betyder ikke valgt endnu.")
-    with reset_col:
-        if st.button("Nulstil", use_container_width=True):
-            for exercise in active_exercises:
-                st.session_state[exercise.key] = exercise.options[0]
-
     for exercise in active_exercises:
         st.markdown(
             f"""
@@ -308,72 +230,27 @@ def main() -> None:
             """,
             unsafe_allow_html=True,
         )
-        level_hint = "  |  ".join(
-            f"{format_level(option)}: {option.requirement} ({option.points}p)"
-            for option in exercise.options
-            if option.level > 0
-        )
-        st.markdown(f'<div class="level-guide">{html.escape(level_hint)}</div>', unsafe_allow_html=True)
-        option = st.radio(
+        option = st.selectbox(
             "Vælg niveau",
             options=exercise.options,
             index=0,
-            format_func=format_level,
-            horizontal=True,
+            format_func=format_option,
             key=exercise.key,
             label_visibility="collapsed",
-        )
-        st.markdown(
-            f"""
-            <div class="selected-result">
-                <span class="pill">{option.points} point</span>
-                <span class="muted-pill">{html.escape(option.requirement)}</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
         )
         selections[exercise.key] = option
         total += option.points
 
     grade = estimate_grade(total, thresholds)
-    next_target = next_grade_target(total, thresholds)
     selected_levels = [option.level for option in selections.values() if option.level > 0]
     lowest_level = min(selected_levels) if selected_levels else "-"
-    completed = sum(1 for option in selections.values() if option.level > 0)
 
     with summary:
         total_col, grade_col, level_col = st.columns(3)
         total_col.metric("Total", f"{total} point")
         grade_col.metric("Karakter", grade)
-        level_col.metric("Næste mål", next_target)
+        level_col.metric("Laveste niveau", lowest_level)
     progress_placeholder.progress(min(total / 350, 1.0), text=f"{total} / 350 point")
-
-    dashboard_items = []
-    for exercise in active_exercises:
-        option = selections[exercise.key]
-        level = format_level(option)
-        dashboard_items.append(
-            f"""
-            <div class="dashboard-item">
-                <div class="dashboard-name">{html.escape(exercise.title)}</div>
-                <div class="dashboard-detail">Niveau {html.escape(level)} · {option.points}p</div>
-                <div class="dashboard-detail">{html.escape(option.requirement)}</div>
-            </div>
-            """
-        )
-    dashboard_placeholder.markdown(
-        f"""
-        <div class="dashboard-grid">
-            <div class="dashboard-item">
-                <div class="dashboard-name">Status</div>
-                <div class="dashboard-detail">{completed}/{len(active_exercises)} øvelser valgt</div>
-                <div class="dashboard-detail">Laveste niveau: {html.escape(str(lowest_level))}</div>
-            </div>
-            {''.join(dashboard_items)}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
     with st.expander("Se pointfordeling"):
         for exercise in active_exercises:
